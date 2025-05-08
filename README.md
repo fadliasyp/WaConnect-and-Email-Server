@@ -1,5 +1,13 @@
 # service-channel-email
 
+Untuk generate token
+node gmailAuth.js
+
+Untuk run chatbot
+node server.js
+
+Untuk cek token
+node testToken.js
 
 
 ## Getting started
