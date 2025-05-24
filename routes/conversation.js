@@ -1,4 +1,5 @@
 const express = require('express');
+const { v4: uuidv4 } = require('uuid');
 const router = express.Router();
 const {
   insertConversation,
@@ -7,18 +8,43 @@ const {
   updateConversation,
   deleteConversation,
   insertMessage,
+  getAllMessages,
   getMessagesByConversationId,
-} = require('../models'); // Make sure to define these functions in your models
+  markUserMessagesAsRead,
+} = require('../models/index'); // Make sure to define these functions in your models
+
+
+router.post('/conversations', async (req, res) => {
+  const { channel_id, user_id, username, last_message, read_status, last_date, session_id, status } = req.body;
+
+  // Validasi wajib kecuali last_date boleh kosong
+  if (!channel_id || !user_id || !username || !last_message || read_status === undefined || !session_id || !status) {
+    return res.status(400).json({ message: 'All fields except last_date are required' });
+  }
+
+  const id = uuidv4();
+  const parsedLastDate = (!last_date || isNaN(Date.parse(last_date))) ? null : last_date;
+
+  try {
+    const data = await insertConversation(id, channel_id, user_id, username, last_message, read_status, parsedLastDate, session_id, status);
+    res.status(201).json(data);
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to create conversation', detail: err.message });
+  }
+});
 
 // Route to fetch all conversations
 router.get('/conversations', async (req, res) => {
   try {
-    const data = await getAllConversations();  // Get all conversations from the DB
+    const data = await getAllConversations();
+    console.log('Data conversations:', data);
     res.json(data);
   } catch (err) {
+    console.error('Error fetching conversations:', err);
     res.status(500).json({ error: 'Failed to fetch conversations', detail: err.message });
   }
 });
+
 
 // Route to fetch a specific conversation by ID
 router.get('/conversations/:id', async (req, res) => {
@@ -34,18 +60,25 @@ router.get('/conversations/:id', async (req, res) => {
 });
 
 // Route to create a new conversation
-router.post('/conversations', async (req, res) => {
-  const { channel_id, user_id, username, last_message, read_status, last_date, session_id, status } = req.body;
+router.post('/messages/:id', async (req, res) => {
+  const conversation_id = req.params.id;
+  const { sender_type, content, read_status } = req.body;
 
-  if (!channel_id || !user_id || !username || !last_message || !read_status || !last_date || !session_id || !status) {
-    return res.status(400).json({ message: 'All fields are required' });
+  if (!sender_type || !content || read_status === undefined) {
+    return res.status(400).json({ message: 'Sender type, content, and read status are required' });
   }
 
   try {
-    const data = await insertConversation(channel_id, user_id, username, last_message, read_status, last_date, session_id, status);
-    res.status(201).json(data);
+    const newMessage = await insertMessage(conversation_id, sender_type, content, read_status);
+
+    // Jika yang kirim chatbot, update semua pesan user yang unread jadi read
+    if (sender_type === 'chatbot') {
+      await markUserMessagesAsRead(conversation_id);
+    }
+
+    res.status(201).json(newMessage);
   } catch (err) {
-    res.status(500).json({ error: 'Failed to create conversation', detail: err.message });
+    res.status(500).json({ error: 'Failed to send message', detail: err.message });
   }
 });
 
@@ -82,10 +115,23 @@ router.delete('/conversations/:id', async (req, res) => {
 });
 
 // Route to fetch messages of a conversation
-router.get('/conversations/:id/messages', async (req, res) => {
+// GET all messages
+router.get('/messages', async (req, res) => {
   try {
-    const messages = await getMessagesByConversationId(req.params.id);  // Get messages for a specific conversation
-    if (!messages) {
+    const messages = await getAllMessages();
+    if (!messages || messages.length === 0) {
+      return res.status(404).json({ message: 'No messages found' });
+    }
+    res.json(messages);
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to fetch messages', detail: err.message });
+  }
+});
+
+router.get('/messages/:id', async (req, res) => {
+  try {
+    const messages = await getMessagesByConversationId(req.params.id);
+    if (!messages || messages.length === 0) {
       return res.status(404).json({ message: 'No messages found for this conversation' });
     }
     res.json(messages);
@@ -94,16 +140,17 @@ router.get('/conversations/:id/messages', async (req, res) => {
   }
 });
 
-// Route to post a new message for a conversation
-router.post('/conversations/:id/messages', async (req, res) => {
+// POST insert message with conversation_id = :id
+router.post('/messages/:id', async (req, res) => {
+  const conversation_id = req.params.id;
   const { sender_type, content, read_status } = req.body;
 
-  if (!sender_type || !content || !read_status) {
+  if (!sender_type || !content || read_status === undefined) {
     return res.status(400).json({ message: 'Sender type, content, and read status are required' });
   }
 
   try {
-    const newMessage = await insertMessage(req.params.id, sender_type, content, read_status);  // Insert a new message
+    const newMessage = await insertMessage(conversation_id, sender_type, content, read_status);
     res.status(201).json(newMessage);
   } catch (err) {
     res.status(500).json({ error: 'Failed to send message', detail: err.message });

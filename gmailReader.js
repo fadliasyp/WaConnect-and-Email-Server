@@ -41,7 +41,6 @@ async function checkEmailsAndReply() {
       const emailBody = msg.data.snippet;
 
       if (from.includes('mailer-daemon@') || from.includes('noreply') || from.includes('no-reply')) {
-        console.log(`[INFO] Email dari ${from} dilewati karena bukan pengirim valid.`);
         continue;
       }
 
