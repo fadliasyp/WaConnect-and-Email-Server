@@ -1,15 +1,15 @@
-const { Pool } = require("pg");
+const { Pool } = require('pg');
 
 const pool = new Pool({
-  user: "postgres",
-  host: "localhost",
-  database: "postgres",
-  password: "fadliasyip12345",
+  user: 'postgres',
+  host: 'localhost',
+  database: 'postgres',
+  password: 'password',
   // password: 'Megumine14_',
   port: 5432,
 });
 
-const { v4: uuidv4 } = require("uuid");
+const { v4: uuidv4 } = require('uuid');
 async function insertConversation(
   id,
   channel_id,
@@ -19,7 +19,7 @@ async function insertConversation(
   read_status,
   last_date,
   session_id,
-  status
+  status,
 ) {
   const query = `
     INSERT INTO chat.conversations
@@ -27,8 +27,7 @@ async function insertConversation(
     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW(), NOW())
     RETURNING *;
   `;
-  const parsedLastDate =
-    last_date && !isNaN(Date.parse(last_date)) ? last_date : null;
+  const parsedLastDate = last_date && !isNaN(Date.parse(last_date)) ? last_date : null;
 
   const values = [
     id,
@@ -46,7 +45,7 @@ async function insertConversation(
     const result = await pool.query(query, values);
     return result.rows[0];
   } catch (err) {
-    console.error("Error inserting conversation:", err);
+    console.error('Error inserting conversation:', err);
     throw err;
   }
 }
@@ -59,36 +58,25 @@ async function getUnreadUserMessagesByEmail(userEmail) {
 
 async function getAllConversations() {
   try {
-    const result = await pool.query(
-      "SELECT * FROM chat.conversations ORDER BY id DESC"
-    );
+    const result = await pool.query('SELECT * FROM chat.conversations ORDER BY id DESC');
     return result.rows;
   } catch (err) {
-    console.error("Error fetching conversations:", err);
+    console.error('Error fetching conversations:', err);
     throw err;
   }
 }
 
 async function getConversationById(id) {
   try {
-    const result = await pool.query(
-      "SELECT * FROM chat.conversations WHERE id = $1",
-      [id]
-    );
+    const result = await pool.query('SELECT * FROM chat.conversations WHERE id = $1', [id]);
     return result.rows[0];
   } catch (err) {
-    console.error("Error fetching conversation:", err);
+    console.error('Error fetching conversation:', err);
     throw err;
   }
 }
 
-async function updateConversation(
-  id,
-  last_message,
-  read_status,
-  last_date,
-  status
-) {
+async function updateConversation(id, last_message, read_status, last_date, status) {
   const query = `
     UPDATE chat.conversations
     SET last_message = $1, read_status = $2, last_date = $3, status = $4, updated_at = NOW()
@@ -101,20 +89,19 @@ async function updateConversation(
     const result = await pool.query(query, values);
     return result.rows[0];
   } catch (err) {
-    console.error("Error updating conversation:", err);
+    console.error('Error updating conversation:', err);
     throw err;
   }
 }
 
 async function deleteConversation(id) {
   try {
-    const result = await pool.query(
-      "DELETE FROM chat.conversations WHERE id = $1 RETURNING *;",
-      [id]
-    );
+    const result = await pool.query('DELETE FROM chat.conversations WHERE id = $1 RETURNING *;', [
+      id,
+    ]);
     return result.rows[0];
   } catch (err) {
-    console.error("Error deleting conversation:", err);
+    console.error('Error deleting conversation:', err);
     throw err;
   }
 }
@@ -129,7 +116,7 @@ async function getConversationBySessionId(session_id) {
     const result = await pool.query(query, [session_id]);
     return result.rows[0];
   } catch (err) {
-    console.error("Error fetching conversation by session_id:", err);
+    console.error('Error fetching conversation by session_id:', err);
     throw err;
   }
 }
@@ -148,12 +135,7 @@ async function getMessagesByConversationId(conversationId) {
 }
 
 // Insert pesan baru dengan conversation_id
-async function insertMessage(
-  conversation_id,
-  sender_type,
-  content,
-  read_status
-) {
+async function insertMessage(conversation_id, sender_type, content, read_status) {
   const id = uuidv4();
   const query = `
   INSERT INTO chat.messages (
@@ -176,7 +158,7 @@ async function markUserMessagesAsRead(conversation_id) {
   try {
     await pool.query(query, [conversation_id]);
   } catch (err) {
-    console.error("Error marking user messages as read:", err);
+    console.error('Error marking user messages as read:', err);
     throw err;
   }
 }
