@@ -110,6 +110,11 @@ async function processMessage(client, message) {
     return;
   }
 
+  if (message.type === 'sticker') {
+    console.log('Pesan stiker diabaikan.');
+    return;
+  }
+
   const now = dayjs().tz('Asia/Jakarta');
   console.log(`[${now.format('YYYY-MM-DD HH:mm:ss')}] Pesan diterima dari ${message.from}`);
   const phoneNumber = message.from.split('@')[0];
