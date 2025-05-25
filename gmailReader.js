@@ -38,33 +38,49 @@ async function checkEmailsAndReply() {
       const headers = msg.data.payload.headers;
       const from = getHeader(headers, 'From');
       const subject = getHeader(headers, 'Subject');
+      const messageId = getHeader(headers, 'Message-ID');
       const emailBody = msg.data.snippet;
 
       if (from.includes('mailer-daemon@') || from.includes('noreply') || from.includes('no-reply')) {
         continue;
       }
 
-      console.log(`[INFO] Email baru dari ${from}: ${emailBody}`);
+      const cleanEmail = extractEmail(from);
+
+      console.log(`[INFO] Email baru dari ${cleanEmail}: ${emailBody}`);
+
+      let conversationId = null;
 
       try {
-        const chatbotResponse = await axios.post('http://localhost:3000/api/send-message', {
+        const checkConversation = await axios.post('http://localhost:3000/find-or-create-conversation', {
+          userEmail: cleanEmail,
+        });
+        conversationId = checkConversation.data.conversation_id;
+      } catch (err) {
+        console.error('[ERROR] Gagal mencari/membuat conversation:', err.message || err);
+        continue; 
+      }
+
+      try {
+        const chatbotResponse = await axios.post(`http://localhost:3000/messages/${conversationId}`, {
           question: emailBody,
-          userEmail: from,
-          sessionId: 'default-session-123',
+          userEmail: cleanEmail,
         });
 
-        if (!chatbotResponse.data || !chatbotResponse.data.chatbotResponse) {
-          throw new Error('Respons dari chatbot tidak valid');
-        }
+        // if (!chatbotResponse.data || !chatbotResponse.data.chatbotResponse) {
+        //   throw new Error('Respons dari chatbot tidak valid');
+        // }
 
         const replyText = chatbotResponse.data.chatbotResponse;
 
         const reply = [
-          'To: ' + from,
-          'Subject: Re: ' + subject,
+          `To: ${cleanEmail}`,
+          `From: me`, 
+          `Subject: Re: ${subject}`,
+          messageId ? `In-Reply-To: ${messageId}` : '',
           '',
           replyText,
-        ].join('\n');
+        ].filter(Boolean).join('\n');
 
         const encoded = Buffer.from(reply)
           .toString('base64')
@@ -79,7 +95,7 @@ async function checkEmailsAndReply() {
           },
         });
 
-        console.log(`[INFO] Balasan dikirim ke ${from}`);
+        console.log(`[INFO] Balasan dikirim ke ${cleanEmail}`);
 
         await gmail.users.messages.modify({
           userId: 'me',
@@ -89,18 +105,24 @@ async function checkEmailsAndReply() {
           },
         });
 
-      } catch (err) {
-        console.error('[ERROR] Gagal membalas email:', err.message || err);
+      } 
+      catch (err) {
+        // console.error('[ERROR] Gagal membalas email:', err.response?.data || err.message || err);
       }
     }
   } catch (err) {
-    console.error('[ERROR] Gagal memeriksa email:', err.message || err);
+    // console.error('[ERROR] Gagal memeriksa email:', err.message || err);
   }
 }
 
 function getHeader(headers, name) {
-  const found = headers.find(h => h.name === name);
+  const found = headers.find(h => h.name.toLowerCase() === name.toLowerCase());
   return found ? found.value : '';
+}
+
+function extractEmail(str) {
+  const match = str.match(/<([^>]+)>/);
+  return match ? match[1] : str;
 }
 
 module.exports = checkEmailsAndReply;

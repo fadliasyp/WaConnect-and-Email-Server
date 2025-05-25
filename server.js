@@ -8,7 +8,6 @@ const app = express();
 const port = process.env.PORT || 3000;
 const chatbotRoutes = require("./routes/chatbotRoutes");
 app.use("/api", chatbotRoutes);
-const { getConversationBySessionId } = require("./models/index");
 const bodyParser = require("body-parser");
 const conversationRoutes = require("./routes/conversation");
 app.use(bodyParser.json());
@@ -31,23 +30,13 @@ waConnectApp.use("/auth", authRouter);
 waConnectApp.use("/api", authenticateToken, chatbotRouter);
 const port2 = 21465;
 
-app.get("/conversation/:sessionId", async (req, res) => {
-  const sessionId = req.params.sessionId;
-  try {
-    const conversation = await getConversationBySessionId(sessionId);
-    if (conversation && conversation.status === "replied") {
-      return res.send("This conversation has already been replied.");
-    }
-    res.json(conversation || { message: "Conversation not found." });
-  } catch (err) {
-    console.error("Error:", err);
-    res.status(500).send("Internal Server Error");
-  }
-});
+const {
+  insertMessage
+} = require('./models/index');
 
 function createTransporter() {
   return nodemailer.createTransport({
-    service: "gmail",
+    service: 'gmail',
     auth: {
       user: process.env.EMAIL_USER,
       pass: process.env.EMAIL_PASS,
@@ -55,134 +44,166 @@ function createTransporter() {
   });
 }
 
-app.post("/api/send-message", async (req, res) => {
-  const { question, userEmail, sessionId } = req.body;
+app.post('/find-or-create-conversation', async (req, res) => {
+  const { userEmail } = req.body;
 
-  if (!question || !userEmail || !sessionId) {
+  if (!userEmail) return res.status(400).json({ message: 'userEmail is required.' });
+
+  try {
+    const existing = await pool.query(
+      'SELECT * FROM chat.conversations WHERE user_id = $1 LIMIT 1',
+      [userEmail]
+    );
+
+    if (existing.rows.length > 0) {
+      return res.json({ conversation_id: existing.rows[0].id });
+    }
+    const newId = uuidv4();
+    const channelId = uuidv4();
+    const sessionId = `sess-${Date.now()}`;
+    const userId = userEmail; 
+    const lastMessage = 'No messages yet';
+    const username = userEmail;
+    const readStatus = 'unread';
+    const lastDate = new Date();
+
+    await pool.query(
+      `INSERT INTO chat.conversations 
+      (id, channel_id, user_id, username, last_message, read_status, last_date, session_id, status, created_at, updated_at)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW(), NOW())`,
+      [newId, channelId, userId, username, lastMessage, readStatus, lastDate, sessionId, 'replied']
+    );
+
+    return res.json({ conversation_id: newId });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: 'Error creating/finding conversation' });
+  }
+});
+
+app.post('/messages/:id', async (req, res) => {
+  const { id: conversation_id } = req.params;
+  const { question, userEmail } = req.body;
+
+  if (!question || !userEmail || typeof question !== 'string' || question.trim() === '') {
     return res.status(400).json({
-      message: "Field question, userEmail, and sessionId are required.",
+      message: 'Field question and userEmail are required and must be valid.',
     });
   }
 
-  const username = userEmail.replace(/@(gmail\.com|icloud\.com)$/, "");
+  const username = userEmail.split('@')[0];
 
-  // Ambil conversation berdasarkan session_id
-  const convoResult = await pool.query(
-    "SELECT * FROM chat.conversations WHERE session_id = $1 LIMIT 1",
-    [sessionId]
-  );
-  let conversation = convoResult.rows[0];
+  let conversation;
+  try {
+    const convoResult = await pool.query(
+      'SELECT * FROM chat.conversations WHERE id = $1 LIMIT 1',
+      [conversation_id]
+    );
 
-  if (!conversation) {
-    return res.status(404).json({ message: "Conversation not found." });
-  }
+    conversation = convoResult.rows[0];
+    if (!conversation) {
+      return res.status(404).json({ message: 'Conversation not found.' });
+    }
 
-  // Cek apakah ada pesan user dengan read_status = 'unread'
-  const unreadUserMsgResult = await pool.query(
-    `SELECT * FROM chat.messages 
-     WHERE conversation_id = $1 AND sender_type = 'user' AND read_status = 'unread'`,
-    [conversation.id]
-  );
+    const lastMessageResult = await pool.query(
+      `SELECT sender_type FROM chat.messages 
+       WHERE conversation_id = $1 
+       ORDER BY created_at DESC 
+       LIMIT 1`,
+      [conversation_id]
+    );
 
-  if (unreadUserMsgResult.rows.length === 0) {
-    // Tidak ada pesan user yang belum dibaca berarti chatbot sudah membalas
-    return res.status(400).json({
-      message:
-        "This conversation has already been replied (no unread user messages).",
+    const lastMessage = lastMessageResult.rows[0];
+
+    if (lastMessage?.sender_type === 'chatbot') {
+      return res.status(200).json({
+        message: 'This conversation has already been replied by the chatbot.',
+      });
+    }
+  } catch (err) {
+    return res.status(500).json({
+      message: 'Database error during conversation lookup.',
+      error: err.message,
     });
   }
 
-  // Kirim ke chatbot API
-  let chatbotMessage = "No response from chatbot.";
+  let chatbotMessage = 'No response from chatbot.';
+
   try {
     const chatbotRes = await axios.post(
-      "https://api.majadigidev.jatimprov.go.id/api/external/chatbot/send-message",
+      'https://api.majadigidev.jatimprov.go.id/api/external/chatbot/send-message',
       {
         question,
-        session_id: sessionId,
-        additional_context: "",
+        session_id: conversation.session_id,
+        additional_context: '',
       }
     );
 
     const messages = chatbotRes.data?.data?.message || [];
     if (messages.length > 0) {
-      chatbotMessage = messages.map((msg) => msg.text).join("\n\n");
-
+      chatbotMessage = messages.map(msg => msg.text).join('\n\n');
       const links = messages[0]?.suggest_links || [];
+
       if (links.length > 0) {
-        let linkText = "\n\nLink Pages:\n";
-        links.forEach((link) => {
+        let linkText = '\n\nLink Pages:\n';
+        links.forEach(link => {
           linkText += `${link.title}: ${link.link}\n`;
         });
         chatbotMessage += linkText;
       }
     }
   } catch (error) {
-    console.error("Chatbot API Error:", error.message || error);
+    console.error('Chatbot API Error:', error.message || error);
     return res.status(500).json({
-      message: "Failed to get chatbot response.",
+      message: 'Failed to get chatbot response.',
       error: error.message || error,
     });
   }
 
   try {
-    // Kirim email ke user
     const transporter = createTransporter();
     await transporter.sendMail({
       from: `"Majadigi Chatbot" <${process.env.EMAIL_USER}>`,
       to: userEmail,
-      subject: "Response from Majadigi Chatbot",
-      html: `<p>Hi ${username || "there"}!</p><p>${chatbotMessage}</p>`,
+      subject: 'Response from Majadigi Chatbot',
+      html: `<p>Hi ${username || 'there'}!</p><p>${chatbotMessage.replace(/\n/g, '<br>')}</p>`,
     });
 
-    // Simpan pesan chatbot ke database
-    const newMessageId = uuidv4();
-    await pool.query(
-      "INSERT INTO chat.messages (id, conversation_id, sender_type, content, sent_at, read_status) VALUES ($1, $2, $3, $4, $5, $6)",
-      [
-        newMessageId,
-        conversation.id,
-        "chatbot",
-        chatbotMessage,
-        new Date(),
-        "unread",
-      ]
-    );
+    const newMessage = await insertMessage(conversation_id, 'chatbot', chatbotMessage, 'unread');
 
-    // Update semua pesan user yang belum dibaca menjadi 'read'
     await pool.query(
       `UPDATE chat.messages 
        SET read_status = 'read', updated_at = NOW() 
-       WHERE conversation_id = $1 AND sender_type = 'user' AND read_status = 'unread'`,
-      [conversation.id]
+       WHERE conversation_id = $1 AND read_status = 'unread'`,
+      [conversation_id]
     );
 
-    // Update status conversation jadi replied
     await pool.query(
-      "UPDATE chat.conversations SET status = $1, last_message = $2, read_status = $3, last_date = NOW() WHERE id = $4",
-      ["replied", chatbotMessage, "unread", conversation.id]
+      `UPDATE chat.conversations 
+       SET status = $1, last_message = $2, read_status = $3, last_date = NOW(), updated_at = NOW() 
+       WHERE id = $4`,
+      ['replied', chatbotMessage, 'unread', conversation_id]
     );
 
-    res.status(200).json({
-      message: "Email sent and chatbot response saved successfully",
+    return res.status(201).json({
+      message: 'Message inserted and email sent successfully.',
       chatbotResponse: chatbotMessage,
+      newMessage,
     });
-  } catch (emailError) {
-    console.error("Error sending email:", emailError.message || emailError);
-    res.status(500).json({
-      message: "Failed to send email.",
-      error: emailError.message || emailError,
-    });
+  } catch (err) {
+    console.error('Error saving message or sending email:', err.message || err);
+    return res.status(500).json({ error: 'Failed to send message', detail: err.message });
   }
+});
+
+
+app.listen(port, () => {
+  console.log(`Server running on http://localhost:${port}`);
 });
 
 setInterval(() => {
   checkEmailsAndReply().catch(console.error);
 }, 60 * 1000);
-
-app.listen(port, () => {
-  console.log(`Server running on http://localhost:${port}`);
-});
 
 // ===============
 

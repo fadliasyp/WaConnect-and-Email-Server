@@ -1,45 +1,24 @@
 const { Pool } = require('pg');
 
 const pool = new Pool({
-  user: 'postgres',
-  host: 'localhost',
-  database: 'postgres',
-  password: 'password',
-  // password: 'Megumine14_',
-  port: 5432,
+  user: 'postgres',         
+  host: 'localhost',        
+  database: 'postgres',  
+  password: 'Megumine14_',  
+  port: 5432,               
 });
 
 const { v4: uuidv4 } = require('uuid');
-async function insertConversation(
-  id,
-  channel_id,
-  user_id,
-  username,
-  last_message,
-  read_status,
-  last_date,
-  session_id,
-  status,
-) {
+async function insertConversation(id, channel_id, user_id, username, last_message, read_status, last_date, session_id, status) {
   const query = `
     INSERT INTO chat.conversations
     (id, channel_id, user_id, username, last_message, read_status, last_date, session_id, status, created_at, updated_at)
     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW(), NOW())
     RETURNING *;
   `;
-  const parsedLastDate = last_date && !isNaN(Date.parse(last_date)) ? last_date : null;
+  const parsedLastDate = (last_date && !isNaN(Date.parse(last_date))) ? last_date : null;
 
-  const values = [
-    id,
-    channel_id,
-    user_id,
-    username,
-    last_message,
-    read_status,
-    parsedLastDate,
-    session_id,
-    status,
-  ];
+  const values = [id, channel_id, user_id, username, last_message, read_status, parsedLastDate, session_id, status];
 
   try {
     const result = await pool.query(query, values);
@@ -94,11 +73,10 @@ async function updateConversation(id, last_message, read_status, last_date, stat
   }
 }
 
+
 async function deleteConversation(id) {
   try {
-    const result = await pool.query('DELETE FROM chat.conversations WHERE id = $1 RETURNING *;', [
-      id,
-    ]);
+    const result = await pool.query('DELETE FROM chat.conversations WHERE id = $1 RETURNING *;', [id]);
     return result.rows[0];
   } catch (err) {
     console.error('Error deleting conversation:', err);
@@ -114,7 +92,7 @@ async function getConversationBySessionId(session_id) {
   `;
   try {
     const result = await pool.query(query, [session_id]);
-    return result.rows[0];
+    return result.rows[0]; 
   } catch (err) {
     console.error('Error fetching conversation by session_id:', err);
     throw err;
@@ -127,14 +105,12 @@ async function getAllMessages() {
   return result.rows;
 }
 
-// Ambil pesan berdasarkan message id
 async function getMessagesByConversationId(conversationId) {
   const query = `SELECT * FROM chat.messages WHERE conversation_id = $1 ORDER BY created_at ASC`;
   const result = await pool.query(query, [conversationId]);
-  return result.rows; // array of messages
+  return result.rows; 
 }
 
-// Insert pesan baru dengan conversation_id
 async function insertMessage(conversation_id, sender_type, content, read_status) {
   const id = uuidv4();
   const query = `

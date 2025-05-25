@@ -1,6 +1,10 @@
 const express = require('express');
 const { v4: uuidv4 } = require('uuid');
 const router = express.Router();
+const axios = require('axios');
+const pool = require('../config/db');
+const nodemailer = require('nodemailer');
+
 const {
   insertConversation,
   getAllConversations,
@@ -11,13 +15,22 @@ const {
   getAllMessages,
   getMessagesByConversationId,
   markUserMessagesAsRead,
-} = require('../models/index'); // Make sure to define these functions in your models
+} = require('../models/index');
+
+function createTransporter() {
+  return nodemailer.createTransport({
+    service: 'gmail',
+    auth: {
+      user: process.env.EMAIL_USER,
+      pass: process.env.EMAIL_PASS,
+    },
+  });
+}
 
 
 router.post('/conversations', async (req, res) => {
   const { channel_id, user_id, username, last_message, read_status, last_date, session_id, status } = req.body;
 
-  // Validasi wajib kecuali last_date boleh kosong
   if (!channel_id || !user_id || !username || !last_message || read_status === undefined || !session_id || !status) {
     return res.status(400).json({ message: 'All fields except last_date are required' });
   }
@@ -33,7 +46,6 @@ router.post('/conversations', async (req, res) => {
   }
 });
 
-// Route to fetch all conversations
 router.get('/conversations', async (req, res) => {
   try {
     const data = await getAllConversations();
@@ -45,11 +57,9 @@ router.get('/conversations', async (req, res) => {
   }
 });
 
-
-// Route to fetch a specific conversation by ID
 router.get('/conversations/:id', async (req, res) => {
   try {
-    const data = await getConversationById(req.params.id);  // Fetch conversation by ID
+    const data = await getConversationById(req.params.id); 
     if (!data) {
       return res.status(404).json({ message: 'Conversation not found' });
     }
@@ -59,30 +69,28 @@ router.get('/conversations/:id', async (req, res) => {
   }
 });
 
-// Route to create a new conversation
-router.post('/messages/:id', async (req, res) => {
-  const conversation_id = req.params.id;
-  const { sender_type, content, read_status } = req.body;
+// router.post('/messages/:id', async (req, res) => {
+//   const conversation_id = req.params.id;
+//   const { sender_type, content, read_status } = req.body;
 
-  if (!sender_type || !content || read_status === undefined) {
-    return res.status(400).json({ message: 'Sender type, content, and read status are required' });
-  }
+//   if (!sender_type || !content || read_status === undefined) {
+//     return res.status(400).json({ message: 'Sender type, content, and read status are required' });
+//   }
 
-  try {
-    const newMessage = await insertMessage(conversation_id, sender_type, content, read_status);
+//   try {
+//     const newMessage = await insertMessage(conversation_id, sender_type, content, read_status);
 
-    // Jika yang kirim chatbot, update semua pesan user yang unread jadi read
-    if (sender_type === 'chatbot') {
-      await markUserMessagesAsRead(conversation_id);
-    }
+//     // Jika yang kirim chatbot, update semua pesan user yang unread jadi read
+//     if (sender_type === 'chatbot') {
+//       await markUserMessagesAsRead(conversation_id);
+//     }
 
-    res.status(201).json(newMessage);
-  } catch (err) {
-    res.status(500).json({ error: 'Failed to send message', detail: err.message });
-  }
-});
+//     res.status(201).json(newMessage);
+//   } catch (err) {
+//     res.status(500).json({ error: 'Failed to send message', detail: err.message });
+//   }
+// });
 
-// Route to update a conversation
 router.put('/conversations/:id', async (req, res) => {
   const { last_message, read_status, last_date, status } = req.body;
 
@@ -101,10 +109,9 @@ router.put('/conversations/:id', async (req, res) => {
   }
 });
 
-// Route to delete a conversation
 router.delete('/conversations/:id', async (req, res) => {
   try {
-    const data = await deleteConversation(req.params.id);  // Delete conversation by ID
+    const data = await deleteConversation(req.params.id); 
     if (!data) {
       return res.status(404).json({ message: 'Conversation not found' });
     }
@@ -114,8 +121,6 @@ router.delete('/conversations/:id', async (req, res) => {
   }
 });
 
-// Route to fetch messages of a conversation
-// GET all messages
 router.get('/messages', async (req, res) => {
   try {
     const messages = await getAllMessages();
@@ -137,23 +142,6 @@ router.get('/messages/:id', async (req, res) => {
     res.json(messages);
   } catch (err) {
     res.status(500).json({ error: 'Failed to fetch messages', detail: err.message });
-  }
-});
-
-// POST insert message with conversation_id = :id
-router.post('/messages/:id', async (req, res) => {
-  const conversation_id = req.params.id;
-  const { sender_type, content, read_status } = req.body;
-
-  if (!sender_type || !content || read_status === undefined) {
-    return res.status(400).json({ message: 'Sender type, content, and read status are required' });
-  }
-
-  try {
-    const newMessage = await insertMessage(conversation_id, sender_type, content, read_status);
-    res.status(201).json(newMessage);
-  } catch (err) {
-    res.status(500).json({ error: 'Failed to send message', detail: err.message });
   }
 });
 
