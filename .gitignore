@@ -1,7 +1,7 @@
 node_modules
 sessions
 tokens
-.env
 node_modules/
 all-files.txt
 /generated/prisma
+.env
