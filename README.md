@@ -80,14 +80,35 @@ catatan :
 
 # service-channel-email✉️
 
-Untuk generate token
+### Dependencies yang Perlu Diinstal
+npm install googleapis dotenv
+npm install nodemailer
+
+### 1. Buat App Password di Google (Gunakan Verifikasi 2 Langkah)
+1. Buka halaman https://myaccount.google.com/apppasswords
+2. Pilih Mail sebagai aplikasi, dan Other (Custom name) untuk perangkat, misalnya `Chatbot Email`
+3. Simpan password yang diberikan — digunakan saat otentikasi
+
+### 2. Aktifkan Gmail API dan Dapatkan Credential
+1. Masuk ke Google Cloud Console (https://console.cloud.google.com/)
+2. Buat proyek baru atau gunakan proyek yang sudah ada
+3. Aktifkan Gmail API
+4. Buka menu OAuth consent screen
+   - Isi informasi dasar seperti nama aplikasi, email, dll.
+   - Tambahkan scope: `https://www.googleapis.com/auth/gmail.readonly`
+5. Masuk ke Credentials
+   - Klik Create Credentials → OAuth Client ID
+   - Pilih Application type: `Desktop App`
+   - Salin Client ID dan Client Secret, lalu masukkan ke file .env
+
+### 3. Konfigurasi File .env
+Untuk mengautentikasi akun Gmail dan mendapatkan access token serta refresh token, jalankan:
+
 node gmailAuth.js
 
-Untuk run chatbot
-node server.js
+Salin access token dan refresh token, lalu masukkan ke file .env
 
-Untuk cek token
-node testToken.js
+Terakhir, jalankan npm run start
 
 ## Getting started
 
