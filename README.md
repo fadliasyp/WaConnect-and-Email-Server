@@ -4,12 +4,11 @@ Aplikasi penghubung Whatsapp dengan chatbot
 
 ## Setup
 
-1. `npm install`
-2. ` npx prisma init` ( kalau error, lanjut saja nomor selanjutnya )
+1. `npm install
 
-- membuat prismanya dan memunculkan .env
+2. membuat .env
 
-3. sesuaikan env dengan db Anda
+3. sesuaikan .env dengan .env.example db Anda
 
 4. `npx prisma migrate dev -nama_migrate` / `npx prisma generate`
 
