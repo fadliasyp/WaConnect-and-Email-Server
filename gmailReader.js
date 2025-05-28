@@ -1,6 +1,8 @@
 const { google } = require('googleapis');
 const axios = require('axios');
 require('dotenv').config();
+const timestamp = Math.floor(Date.now() / 1000);
+const query = `is:unread after:${timestamp}`;
 
 const oAuth2Client = new google.auth.OAuth2(
     process.env.CLIENT_ID,
@@ -20,7 +22,7 @@ async function checkEmailsAndReply() {
   try {
     const res = await gmail.users.messages.list({
       userId: 'me',
-      q: 'is:unread',
+      q: query,
     });
 
     const messages = res.data.messages || [];
@@ -39,7 +41,32 @@ async function checkEmailsAndReply() {
       const from = getHeader(headers, 'From');
       const subject = getHeader(headers, 'Subject');
       const messageId = getHeader(headers, 'Message-ID');
-      const emailBody = msg.data.snippet;
+      function decodeBase64Url(base64UrlString) {
+  base64UrlString = base64UrlString.replace(/-/g, '+').replace(/_/g, '/');
+  while (base64UrlString.length % 4) {
+    base64UrlString += '=';
+  }
+  return Buffer.from(base64UrlString, 'base64').toString('utf-8');
+}
+
+function getBody(payload) {
+  let body = '';
+  if (payload.parts && payload.parts.length) {
+
+    for (const part of payload.parts) {
+      if (part.mimeType === 'text/plain' && part.body && part.body.data) {
+        body += decodeBase64Url(part.body.data);
+      }
+    }
+  } else if (payload.body && payload.body.data) {
+    body = decodeBase64Url(payload.body.data);
+  }
+  return body;
+}
+
+// Penggunaan:
+const emailBody = getBody(msg.data.payload);
+
 
       if (from.includes('mailer-daemon@') || from.includes('noreply') || from.includes('no-reply')) {
         continue;
@@ -107,11 +134,11 @@ async function checkEmailsAndReply() {
 
       } 
       catch (err) {
-        // console.error('[ERROR] Gagal membalas email:', err.response?.data || err.message || err);
+        console.error('[ERROR] Gagal membalas email:', err.response?.data || err.message || err);
       }
     }
   } catch (err) {
-    // console.error('[ERROR] Gagal memeriksa email:', err.message || err);
+    console.error('[ERROR] Gagal memeriksa email:', err.message || err);
   }
 }
 

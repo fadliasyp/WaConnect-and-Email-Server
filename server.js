@@ -111,11 +111,11 @@ app.post('/messages/:id', async (req, res) => {
 
     const lastMessage = lastMessageResult.rows[0];
 
-    if (lastMessage?.sender_type === 'chatbot') {
-      return res.status(200).json({
-        message: 'This conversation has already been replied by the chatbot.',
-      });
-    }
+    // if (lastMessage?.sender_type === 'chatbot') {
+    //   return res.status(200).json({
+    //     message: 'This conversation has already been replied by the chatbot.',
+    //   });
+    // }
   } catch (err) {
     return res.status(500).json({
       message: 'Database error during conversation lookup.',
